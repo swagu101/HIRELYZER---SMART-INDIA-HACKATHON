@@ -34,6 +34,7 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from xhtml2pdf import pisa
 from pydantic import BaseModel
 from streamlit_pdf_viewer import pdf_viewer
+from streamlit_autorefresh import st_autorefresh
 
 # Heavy libraries - loaded with caching
 import torch
@@ -50,10 +51,10 @@ from langchain.chains import ConversationalRetrievalChain
 from llm_manager import call_llm, load_groq_api_keys
 from db_manager import (
     db_manager,
-    insert_candidate, 
+    insert_candidate,
     get_top_domains_by_score,
     get_database_stats,
-    detect_domain_from_title_and_description, 
+    detect_domain_from_title_and_description,
     get_domain_similarity
 )
 from user_login import (
@@ -64,10 +65,16 @@ from user_login import (
     get_total_registered_users,
     log_user_action,
     username_exists,
-    save_user_api_key, 
+    save_user_api_key,
     get_user_api_key,
     get_all_user_logs
 )
+
+# ============================================================
+# 💾 Persistent Storage Configuration for Streamlit Cloud
+# ============================================================
+os.makedirs(".streamlit_storage", exist_ok=True)
+DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -217,6 +224,7 @@ Hiring Manager, {company}, {location}
         st.markdown(cover_letter_html, unsafe_allow_html=True)
 
 # ------------------- Initialize -------------------
+# ✅ Initialize database in persistent storage
 create_user_table()
 
 # ------------------- Initialize Session State -------------------
@@ -298,6 +306,7 @@ body, .main {
 
 # ------------------- BEFORE LOGIN -------------------
 if not st.session_state.authenticated:
+    st_autorefresh(interval=6000, key="dashboard_refresh")
 
     # -------- Sidebar --------
     with st.sidebar:
@@ -900,6 +909,19 @@ if st.session_state.username == "admin":
     else:
         st.info("No logs found yet.")
 
+    st.divider()
+    st.subheader("📦 Database Backup & Download")
+
+    if os.path.exists(DB_PATH):
+        with open(DB_PATH, "rb") as f:
+            st.download_button(
+                "⬇️ Download resume_data.db",
+                data=f,
+                file_name="resume_data_backup.db",
+                mime="application/octet-stream"
+            )
+    else:
+        st.warning("⚠️ No database file found yet.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
