@@ -34,7 +34,6 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from xhtml2pdf import pisa
 from pydantic import BaseModel
 from streamlit_pdf_viewer import pdf_viewer
-from streamlit_autorefresh import st_autorefresh
 
 # Heavy libraries - loaded with caching
 import torch
@@ -306,8 +305,6 @@ body, .main {
 
 # ------------------- BEFORE LOGIN -------------------
 if not st.session_state.authenticated:
-    st_autorefresh(interval=6000, key="dashboard_refresh")
-
     # -------- Sidebar --------
     with st.sidebar:
         st.markdown("<h1 style='color:#00BFFF;'>Smart Resume AI</h1>", unsafe_allow_html=True)
@@ -369,16 +366,6 @@ if not st.session_state.authenticated:
     """, unsafe_allow_html=True)
 
     # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
-
-    # Fetch counters
-    total_users = get_total_registered_users()
-    active_logins = get_logins_today()
-    stats = get_database_stats()
-
-# Replace static 15 with dynamic count
-    resumes_uploaded = stats.get("total_candidates", 0)
-
-    states_accessed = 29
 
     glassmorphism_counter_style = """
     <style>
@@ -480,26 +467,47 @@ if not st.session_state.authenticated:
 
     st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="counter-grid">
-        <div class="counter-box">
-            <div class="counter-number">{total_users}</div>
-            <div class="counter-label">Total Users</div>
+    # ✅ Dynamic counter updates without page refresh
+    counter_placeholder = st.empty()
+
+    def render_counters():
+        """Fetch and render counter metrics from database"""
+        total_users = get_total_registered_users()
+        active_logins = get_logins_today()
+        stats = get_database_stats()
+        resumes_uploaded = stats.get("total_candidates", 0)
+        states_accessed = 29
+
+        counter_placeholder.markdown(f"""
+        <div class="counter-grid">
+            <div class="counter-box">
+                <div class="counter-number">{total_users}</div>
+                <div class="counter-label">Total Users</div>
+            </div>
+            <div class="counter-box">
+                <div class="counter-number">{states_accessed}</div>
+                <div class="counter-label">States Accessed</div>
+            </div>
+            <div class="counter-box">
+                <div class="counter-number">{resumes_uploaded}</div>
+                <div class="counter-label">Resumes Uploaded</div>
+            </div>
+            <div class="counter-box">
+                <div class="counter-number">{active_logins}</div>
+                <div class="counter-label">Active Sessions</div>
+            </div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{states_accessed}</div>
-            <div class="counter-label">States Accessed</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{resumes_uploaded}</div>
-            <div class="counter-label">Resumes Uploaded</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_logins}</div>
-            <div class="counter-label">Active Sessions</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
+    # ✅ Auto-update loop with safe exception handling
+    try:
+        while True:
+            render_counters()
+            time.sleep(10)
+    except st.runtime.scriptrunner.StopException:
+        pass
+    except Exception:
+        render_counters()
 
 if not st.session_state.get("authenticated", False):
 
