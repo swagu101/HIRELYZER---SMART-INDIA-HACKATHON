@@ -306,7 +306,7 @@ body, .main {
 
 # ------------------- BEFORE LOGIN -------------------
 if not st.session_state.authenticated:
-    st_autorefresh(interval=30000, key="dashboard_refresh")
+    
 
     # -------- Sidebar --------
     with st.sidebar:
