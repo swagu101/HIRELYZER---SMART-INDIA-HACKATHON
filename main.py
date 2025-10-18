@@ -5629,49 +5629,54 @@ with tab2:
                 normalized_project_entries.append("Placeholder Project")
 
             enhance_prompt = f"""
-            You are a professional, unbiased resume optimization specialist. Create an ATS-friendly resume that uses inclusive, neutral language and avoids gendered or culturally biased terms.
+            You are a professional and unbiased Resume Optimization Specialist with deep knowledge of ATS systems
+            and industry hiring standards. Your goal is to enhance the provided resume data for the role:
+            "{st.session_state['job_title']}" — ensuring high alignment with the skills, tools, and achievements
+            expected in this profession.
 
-            ROLE-SPECIFIC ENHANCEMENT for: "{st.session_state['job_title']}"
-            Enhance all sections to align precisely with this role's industry standards, required competencies, and professional expectations.
+            ROLE-SPECIFIC INSTRUCTION:
+            - Tailor every section toward the competencies, technical skills, and accomplishments relevant to "{st.session_state['job_title']}".
+            - Infer the most essential 6–10 skills, tools, and role expectations for this position using your domain knowledge.
+            - Prioritize accuracy, relevance, and professional clarity over creative rewriting.
 
-            LANGUAGE GUIDELINES:
-            - Use neutral, professional terminology
-            - Avoid gendered language (e.g., "rockstar," "ninja," "guru")
-            - Focus on skills, achievements, and measurable outcomes
-            - Use inclusive action verbs: developed, implemented, optimized, collaborated, analyzed, designed, managed, executed
+            LANGUAGE & TONE GUIDELINES:
+            - Maintain neutral, inclusive, and professional tone.
+            - Avoid biased or gendered terms (e.g., “rockstar,” “guru,” “ninja”).
+            - Use strong, quantifiable, action-oriented verbs such as: developed, implemented, optimized, collaborated, analyzed, designed, managed, executed.
+            - Focus on measurable impact and role-specific outcomes.
+            - Avoid subjective adjectives like "excellent" or "great" — prefer data-driven impact.
 
-            FORMATTING REQUIREMENTS (CRITICAL - Follow exactly):
-            Each section must start with the exact label followed by a colon and content on the next line.
+            FORMATTING REQUIREMENTS (FOLLOW EXACTLY):
+            Each section must start with its label followed by a colon and then the formatted content.
 
             SECTION ENHANCEMENT RULES:
 
-            1. SUMMARY: Write 3-4 bullet points highlighting role-specific expertise, quantifiable achievements, and core competencies. Use strong action verbs and avoid subjective adjectives.
+            1. SUMMARY: Write 3–4 bullet points focusing on the candidate’s core expertise, achievements, and industry alignment for "{st.session_state['job_title']}". Include quantifiable outcomes and relevant keywords.
 
-            2. EXPERIENCE: Structure as lettered entries (A., B., C.) with:
-               - Company Name (Duration) format
-               - Role-specific responsibilities as bullet points
-               - Focus on achievements, not just duties
-               - Include metrics where possible
+            2. EXPERIENCE: Present entries as (A., B., C.) containing:
+               - Company Name (Duration)
+               - Role-specific bullet points focused on achievements and impact
+               - Include metrics, tools used, and measurable improvements where possible
 
-            3. PROJECTS: Structure as lettered entries (A., B., C.) with:
+            3. PROJECTS: Present as (A., B., C.) with:
                - Project Title
-               - Tech Stack: (role-relevant technologies only)
+               - Tech Stack: (only include relevant technologies)
                - Duration: (timeframe)
-               - Description: 4-5 bullet points covering implementation, challenges solved, technologies used, and measurable impact
+               - Description: 4–5 concise bullet points detailing goals, implementation, challenges, and measurable results
 
-            4. SKILLS: List 6-8 current, industry-standard technical skills relevant to the role
-            5. SOFTSKILLS: List 6-8 professional competencies using neutral language
-            6. LANGUAGES: List only spoken/written languages
-            7. INTERESTS: List 3-6 professional interests aligned with the role
-            8. CERTIFICATES: List 3-6 real, industry-recognized certifications with provider and duration
+            4. SKILLS: List 6–8 current and job-relevant technical skills (tools, frameworks, or platforms).
+            5. SOFTSKILLS: List 6–8 professional traits emphasizing collaboration, adaptability, communication, analytical thinking, etc.
+            6. LANGUAGES: Include only spoken or written languages.
+            7. INTERESTS: Include 3–6 professional or domain-related interests.
+            8. CERTIFICATES: Include 3–6 verified, industry-recognized certifications with provider and duration.
 
-            DOMAIN-SPECIFIC REQUIREMENTS:
-            - For Technical Roles: Focus on programming languages, frameworks, tools, methodologies
-            - For Security Roles: Emphasize security tools, compliance standards, threat analysis
-            - For Data Roles: Highlight analytics tools, statistical methods, visualization platforms
-            - For Management Roles: Stress leadership frameworks, process improvement, team development
+            DOMAIN-SPECIFIC FOCUS:
+            - Technical Roles → Frameworks, programming languages, CI/CD, cloud tools, scalability.
+            - Security Roles → Threat analysis, SIEM tools (Splunk, QRadar), incident response, compliance (ISO 27001, NIST).
+            - Data Roles → Python, SQL, Power BI/Tableau, machine learning, data cleaning, statistics.
+            - Management Roles → Leadership, process improvement, KPIs, performance optimization, strategic execution.
 
-            OUTPUT FORMAT (EXACT STRUCTURE REQUIRED):
+            OUTPUT FORMAT (STRICTLY FOLLOW THIS STRUCTURE):
 
             Summary:
             • [Achievement-focused bullet point with quantifiable impact]
@@ -5695,32 +5700,32 @@ with tab2:
                • Tech Stack: [Relevant technologies only]
                • Duration: [Start – End timeframe]
                • Description:
-                 - [Specific implementation or feature developed]
-                 - [Technology used and its application context]
-                 - [Performance improvement or problem solved with metrics]
-                 - [Collaborative achievement or technical innovation]
-                 - [Additional impact or learning outcome]
+                 - [Implementation or feature developed]
+                 - [Technology used and purpose]
+                 - [Performance or security improvement with metrics]
+                 - [Collaboration or innovation highlight]
+                 - [Measured impact or learning outcome]
 
             B. [Project Title]
                • Tech Stack: [Relevant technologies only]
                • Duration: [Start – End timeframe]
                • Description:
-                 - [Specific implementation details]
+                 - [Implementation details]
                  - [Technical challenges addressed]
-                 - [Measurable results or improvements]
-                 - [Skills demonstrated or technologies mastered]
+                 - [Quantified results or impact]
+                 - [Skills demonstrated]
 
             Skills:
-            [Skill 1], [Skill 2], [Skill 3], [Skill 4], [Skill 5], [Skill 6]
+            [Skill 1], [Skill 2], [Skill 3], [Skill 4], [Skill 5], [Skill 6], [Skill 7], [Skill 8]
 
             SoftSkills:
-            [Professional Competency 1], [Professional Competency 2], [Professional Competency 3], [Professional Competency 4], [Professional Competency 5], [Professional Competency 6]
+            [Soft Skill 1], [Soft Skill 2], [Soft Skill 3], [Soft Skill 4], [Soft Skill 5], [Soft Skill 6]
 
             Languages:
             [Language 1], [Language 2], [Language 3]
 
             Interests:
-            [Professional Interest 1], [Professional Interest 2], [Professional Interest 3], [Professional Interest 4]
+            [Interest 1], [Interest 2], [Interest 3], [Interest 4]
 
             Certificates:
             [Certificate Name] – [Provider] ([Duration/Level])
@@ -5728,7 +5733,7 @@ with tab2:
             [Certificate Name] – [Provider] ([Duration/Level])
 
             ENHANCEMENT SOURCE DATA:
-            Transform and enhance the following user inputs while maintaining accuracy and relevance:
+            Transform and enhance the following user inputs while maintaining factual accuracy and logical alignment with "{st.session_state['job_title']}":
 
             Summary:
             {st.session_state['summary']}
@@ -5753,7 +5758,13 @@ with tab2:
 
             Certificates:
             {[cert['name'] for cert in st.session_state['certificate_links'] if cert['name']]}
+
+            IMPORTANT:
+            - Do NOT fabricate fake companies or experience.
+            - Prioritize the candidate’s strengths while aligning with current industry standards.
+            - Keep the response strictly within the defined format without markdown or explanations.
             """
+
 
             with st.spinner("🧠 Thinking..."):
                 ai_output = call_llm(enhance_prompt, session=st.session_state)
@@ -6024,7 +6035,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 FEATURED_COMPANIES = {
     "tech": [
         {
