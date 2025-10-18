@@ -7008,7 +7008,7 @@ with tab3:
             rapid_location = st.text_input("📍 Location", placeholder="e.g., Mumbai", key="rapid_loc")
 
         # Number of results
-        num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
+        num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=10, value=10, step=5, key="rapid_num_results")
 
         # Advanced Filters
         with st.expander("🔧 Advanced Filters"):
