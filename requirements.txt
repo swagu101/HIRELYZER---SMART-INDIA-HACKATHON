@@ -6,6 +6,8 @@ beautifulsoup4
 streamlit-option-menu
 numpy
 pillow
+dnspython
+
 matplotlib
 pytz
 pdfkit
@@ -22,6 +24,7 @@ tabulate
 
 # LangChain ecosystem
 langchain
+langchain-core
 langchain-community
 langchain-huggingface
 langchain-groq
