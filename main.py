@@ -6659,7 +6659,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 FEATURED_COMPANIES = {
     "tech": [
         {
@@ -6818,42 +6817,6 @@ JOB_MARKET_INSIGHTS = {
     ]
 }
 
-def get_featured_companies(category=None):
-    """Get featured companies with original logos, optionally filtered by category"""
-    def has_valid_logo(company):
-        return "logo_url" in company and company["logo_url"].startswith("https://upload.wikimedia.org/")
-
-    if category and category in FEATURED_COMPANIES:
-        return [company for company in FEATURED_COMPANIES[category] if has_valid_logo(company)]
-
-    return [
-        company for companies in FEATURED_COMPANIES.values()
-        for company in companies if has_valid_logo(company)
-    ]
-
-
-def get_market_insights():
-    """Get job market insights"""
-    return JOB_MARKET_INSIGHTS
-
-def get_company_info(company_name):
-    """Get company information by name"""
-    for companies in FEATURED_COMPANIES.values():
-        for company in companies:
-            if company["name"] == company_name:
-                return company
-    return None
-
-def get_companies_by_industry(industry):
-    """Get list of companies by industry"""
-    companies = []
-    for companies_list in FEATURED_COMPANIES.values():
-        for company in companies_list:
-            if "industry" in company and company["industry"] == industry:
-                companies.append(company)
-    return companies
-
-# Sample job search function
 import uuid
 import urllib.parse
 import sqlite3
@@ -6863,18 +6826,115 @@ from zoneinfo import ZoneInfo
 import requests
 import re
 
-# ✅ RapidAPI Configuration (from Streamlit secrets)
 RAPID_API_KEY = st.secrets["rapidapi"]["key"]
 RAPID_API_HOST = st.secrets["rapidapi"]["host"]
 
+SKILL_LIST = ["python","java","c++","c#","javascript","react","node","sql","mongodb",
+              "django","flask","aws","azure","git","docker","kubernetes","tensorflow",
+              "pytorch","ml","ai","nlp","html","css"]
+
+CITIES = ["Bangalore","Hyderabad","Pune","Mumbai","Chennai","Delhi","Noida","Gurgaon"]
+
 def clean_html(raw_html: str) -> str:
-    """Remove HTML tags and comments from API descriptions."""
     if not raw_html:
         return ""
-    # Remove comments
     raw_html = re.sub(r"<!--.*?-->", "", raw_html, flags=re.DOTALL)
-    # Remove all tags
     return re.sub(r"<.*?>", "", raw_html).strip()
+
+def extract_skills_from_jobs(jobs):
+    skill_count = {}
+    for job in jobs:
+        desc = job.get("job_description", "")
+        if desc:
+            desc_lower = desc.lower()
+            for skill in SKILL_LIST:
+                if skill in desc_lower:
+                    skill_count[skill] = skill_count.get(skill, 0) + 1
+    return skill_count
+
+def init_job_trends_db():
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS job_trends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role TEXT NOT NULL,
+                location TEXT NOT NULL,
+                count INTEGER NOT NULL,
+                day DATE NOT NULL,
+                UNIQUE(role, location, day)
+            )
+        ''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        st.error(f"Job trends DB initialization error: {e}")
+
+def save_job_trend(role, location, count):
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        today = datetime.date.today().isoformat()
+        cursor.execute('''
+            INSERT OR REPLACE INTO job_trends (role, location, count, day)
+            VALUES (?, ?, ?, ?)
+        ''', (role, location, count, today))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        st.error(f"Error saving job trend: {e}")
+
+def calculate_competition_score(role, location):
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        today = datetime.date.today()
+        seven_days_ago = today - datetime.timedelta(days=7)
+
+        cursor.execute('''
+            SELECT count FROM job_trends
+            WHERE role = ? AND location = ? AND day = ?
+        ''', (role, location, today.isoformat()))
+        today_row = cursor.fetchone()
+        today_count = today_row[0] if today_row else 0
+
+        cursor.execute('''
+            SELECT SUM(count) FROM job_trends
+            WHERE role = ? AND location = ? AND day >= ? AND day < ?
+        ''', (role, location, seven_days_ago.isoformat(), today.isoformat()))
+        last_7_row = cursor.fetchone()
+        last_7_total = last_7_row[0] if last_7_row and last_7_row[0] else 0
+
+        conn.close()
+
+        if last_7_total == 0:
+            return today_count, 0, 0
+
+        score = (today_count / last_7_total) * 100
+        return today_count, last_7_total, score
+    except Exception as e:
+        st.error(f"Error calculating competition score: {e}")
+        return 0, 0, 0
+
+def get_30day_trend(role, location):
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        thirty_days_ago = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+
+        cursor.execute('''
+            SELECT day, count FROM job_trends
+            WHERE role = ? AND location = ? AND day >= ?
+            ORDER BY day ASC
+        ''', (role, location, thirty_days_ago))
+
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception as e:
+        st.error(f"Error getting 30-day trend: {e}")
+        return []
 
 def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, results=10):
     url = f"https://{RAPID_API_HOST}/search"
@@ -6885,7 +6945,6 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         "remote_jobs_only": str(remote_only).lower()
     }
 
-    # 🔹 Map UI dropdown values to RapidAPI accepted filters
     type_map = {
         "Full-time": "FULLTIME",
         "Part-time": "PARTTIME",
@@ -6911,7 +6970,6 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         return []
 
 def fetch_company_by_domain(domain: str):
-    """Fetch company information by domain using LinkedIn Data API"""
     url = f"https://linkedin-data-api.p.rapidapi.com/get-company-by-domain?domain={domain}"
     headers = {
         "X-RapidAPI-Key": RAPID_API_KEY,
@@ -6926,10 +6984,39 @@ def fetch_company_by_domain(domain: str):
     except Exception:
         return None
 
+def get_featured_companies(category=None):
+    def has_valid_logo(company):
+        return "logo_url" in company and company["logo_url"].startswith("https://upload.wikimedia.org/")
+
+    if category and category in FEATURED_COMPANIES:
+        return [company for company in FEATURED_COMPANIES[category] if has_valid_logo(company)]
+
+    return [
+        company for companies in FEATURED_COMPANIES.values()
+        for company in companies if has_valid_logo(company)
+    ]
+
+def get_market_insights():
+    return JOB_MARKET_INSIGHTS
+
+def get_company_info(company_name):
+    for companies in FEATURED_COMPANIES.values():
+        for company in companies:
+            if company["name"] == company_name:
+                return company
+    return None
+
+def get_companies_by_industry(industry):
+    companies = []
+    for companies_list in FEATURED_COMPANIES.values():
+        for company in companies_list:
+            if "industry" in company and company["industry"] == industry:
+                companies.append(company)
+    return companies
+
 def unified_search(job_role, location, experience_level=None, job_type=None, foundit_experience=None):
     results = []
 
-    # 1️⃣ Fetch live jobs from RapidAPI JSearch
     live_jobs = fetch_live_jobs(job_role, location, job_type=job_type, results=5)
     for job in live_jobs:
         results.append({
@@ -6946,7 +7033,6 @@ def unified_search(job_role, location, experience_level=None, job_type=None, fou
             "apply_link": job.get("job_apply_link", "#")
         })
 
-    # 2️⃣ Add LinkedIn, Naukri, FoundIt links (existing function)
     external_links = search_jobs(job_role, location, experience_level, job_type, foundit_experience)
     for job in external_links:
         results.append({
@@ -6965,10 +7051,7 @@ def unified_search(job_role, location, experience_level=None, job_type=None, fou
 
     return results
 
-
-# Database functions for job search history
 def init_job_search_db():
-    """Initialize the job search database and create user_jobs table if not exists"""
     try:
         conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
@@ -6991,7 +7074,6 @@ def init_job_search_db():
         st.error(f"Database initialization error: {e}")
 
 def save_job_search(username, role, location, results):
-    """Save job search results to database for logged-in user"""
     if not username:
         return
 
@@ -7000,7 +7082,6 @@ def save_job_search(username, role, location, results):
         cursor = conn.cursor()
 
         for result in results:
-            # Extract platform name from title or use platform field
             platform = result.get("platform", "Unknown")
             url = result.get("apply_link", "#")
 
@@ -7016,7 +7097,6 @@ def save_job_search(username, role, location, results):
         st.error(f"Error saving job search: {e}")
 
 def prune_old_searches(username):
-    """Keep only the last 50 saved job searches per user (optional cleanup)"""
     if not username:
         return
 
@@ -7024,7 +7104,6 @@ def prune_old_searches(username):
         conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
 
-        # Delete all but the most recent 50 searches for this user
         cursor.execute('''
             DELETE FROM user_jobs
             WHERE username = ? AND id NOT IN (
@@ -7042,7 +7121,6 @@ def prune_old_searches(username):
         st.error(f"Error pruning old searches: {e}")
 
 def delete_saved_job_search(search_id):
-    """Delete a saved job search by its ID"""
     try:
         conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
@@ -7056,7 +7134,6 @@ def delete_saved_job_search(search_id):
         st.error(f"Error deleting job search: {e}")
 
 def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
-    """Get saved job searches for a user with filtering and pagination"""
     if not username:
         return []
 
@@ -7064,7 +7141,6 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
         conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
 
-        # Build the query with optional platform filter
         if platform_filter and platform_filter != "All":
             cursor.execute('''
                 SELECT id, role, location, platform, url, timestamp
@@ -7101,7 +7177,6 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
         return []
 
 def get_total_saved_searches_count(username, platform_filter=None):
-    """Get total count of saved searches for pagination"""
     if not username:
         return 0
 
@@ -7123,7 +7198,6 @@ def get_total_saved_searches_count(username, platform_filter=None):
         return 0
 
 def get_available_platforms(username):
-    """Get list of platforms that the user has searched on"""
     if not username:
         return []
 
@@ -7142,31 +7216,12 @@ def get_available_platforms(username):
         return []
 
 def slugify(text: str) -> str:
-    """Convert text into a safe slug (lowercase, hyphenated, no special chars)."""
     text = text.lower().strip()
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"\s+", "-", text)
     return text
 
 def render_job_card(title, link, platform_name, brand_color, platform_gradient, company=None, location=None, salary=None, description=None):
-    """
-    Reusable function to render a modern job card with consistent styling.
-
-    Args:
-        title: Job title or role
-        link: Apply link URL
-        platform_name: Name of the platform (LinkedIn, Naukri, etc.)
-        brand_color: Platform brand color (hex)
-        platform_gradient: CSS gradient for platform
-        company: Company name (optional)
-        location: Job location (optional)
-        salary: Salary information (optional)
-        description: Job description (optional)
-
-    Returns:
-        tuple: (html_string, estimated_height)
-    """
-    # Platform icon mapping
     icon_map = {
         "LinkedIn": "🔵",
         "Naukri": "🏢",
@@ -7175,9 +7230,8 @@ def render_job_card(title, link, platform_name, brand_color, platform_gradient, 
     }
     icon = icon_map.get(platform_name, "📄")
 
-    # Build metadata section and calculate height
     metadata_html = ""
-    estimated_height = 180  # Base height (platform + title + button + padding)
+    estimated_height = 180
 
     if company:
         metadata_html += f"""
@@ -7204,7 +7258,6 @@ def render_job_card(title, link, platform_name, brand_color, platform_gradient, 
         estimated_height += 30
 
     if description and description != "Open this platform to view full details.":
-        # Estimate height based on description length
         desc_lines = len(description) // 60 + 1
         estimated_height += (desc_lines * 22) + 15
         metadata_html += f"""
@@ -7213,7 +7266,6 @@ def render_job_card(title, link, platform_name, brand_color, platform_gradient, 
         </div>
         """
 
-    # Create the job card HTML
     job_card_html = f"""
 <!DOCTYPE html>
 <html>
@@ -7283,20 +7335,16 @@ def render_job_card(title, link, platform_name, brand_color, platform_gradient, 
 <div class="job-result-card">
     <div class="shimmer-overlay"></div>
 
-    <!-- Platform Badge -->
     <div style="font-size: 20px; margin-bottom: 12px; z-index: 2; position: relative; font-weight: bold; color: {brand_color};">
         {icon} {platform_name}
     </div>
 
-    <!-- Job Title -->
     <div style="color: #ffffff; font-size: 18px; margin-bottom: 12px; font-weight: bold; z-index: 2; position: relative; line-height: 1.4;">
         {title}
     </div>
 
-    <!-- Metadata (company, location, salary, description) -->
     {metadata_html}
 
-    <!-- Apply Button -->
     <a href="{link}" target="_blank" style="text-decoration: none; z-index: 2; position: relative;">
         <button class="job-button">
             <span style="position: relative; z-index: 2;">🚀 Apply Now →</span>
@@ -7309,22 +7357,17 @@ def render_job_card(title, link, platform_name, brand_color, platform_gradient, 
     return job_card_html, estimated_height
 
 def search_jobs(job_role, location, experience_level=None, job_type=None, foundit_experience=None):
-    # Encode query values
     role_encoded = urllib.parse.quote_plus(job_role.strip())
     loc_encoded = urllib.parse.quote_plus(location.strip())
 
-    # Slugs
     role_path_naukri = job_role.strip().lower().replace(" ", "-")
     city_part = location.strip().split(",")[0].strip()
     city_naukri = city_part.lower().replace(" ", "-")
-    # Only encode what the user entered for the query
     city_query_naukri = urllib.parse.quote_plus(location.strip())
 
-    # FoundIt slugs
     role_path_foundit = slugify(job_role)
     city_path_foundit = slugify(city_part)
 
-    # Experience mappings
     experience_range_map = {
         "Internship": "0~0", "Entry Level": "1~1", "Associate": "2~3",
         "Mid-Senior Level": "4~7", "Director": "8~15", "Executive": "16~20"
@@ -7342,14 +7385,12 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         "Temporary": "T", "Volunteer": "V", "Internship": "I"
     }
 
-    # LinkedIn URL
     linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={role_encoded}&location={loc_encoded}"
     if experience_level in linkedin_exp_map:
         linkedin_url += f"&f_E={linkedin_exp_map[experience_level]}"
     if job_type in job_type_map:
         linkedin_url += f"&f_JT={job_type_map[job_type]}"
 
-    # Determine experience values
     if foundit_experience is not None:
         experience_range = f"{foundit_experience}~{foundit_experience}"
         experience_exact = str(foundit_experience)
@@ -7357,7 +7398,6 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         experience_range = experience_range_map.get(experience_level, "")
         experience_exact = experience_exact_map.get(experience_level, "")
 
-    # Naukri URL – no forced "and-india"
     naukri_url = (
         f"https://www.naukri.com/{role_path_naukri}-jobs-in-{city_naukri}"
         f"?k={role_encoded}&l={city_query_naukri}"
@@ -7366,7 +7406,6 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         naukri_url += f"&experience={experience_exact}"
     naukri_url += "&nignbevent_src=jobsearchDeskGNB"
 
-    # FoundIt URL
     search_id = uuid.uuid4()
     child_search_id = uuid.uuid4()
     if role_path_foundit and city_path_foundit:
@@ -7393,53 +7432,15 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         {"title": f"FoundIt (Monster): {job_role} jobs in {location}", "link": foundit_url}
     ]
 
-
-
-def add_hyperlink(paragraph, url, text, color="0000FF", underline=True):
-    """
-    A function to add a hyperlink to a paragraph.
-    """
-    part = paragraph.part
-    r_id = part.relate_to(url, RT.HYPERLINK, is_external=True)
-
-    hyperlink = OxmlElement('w:hyperlink')
-    hyperlink.set(qn('r:id'), r_id)
-
-    new_run = OxmlElement('w:r')
-    rPr = OxmlElement('w:rPr')
-
-    # Color and underline
-    if underline:
-        u = OxmlElement('w:u')
-        u.set(qn('w:val'), 'single')
-        rPr.append(u)
-
-    color_element = OxmlElement('w:color')
-    color_element.set(qn('w:val'), color)
-    rPr.append(color_element)
-
-    new_run.append(rPr)
-
-    text_elem = OxmlElement('w:t')
-    text_elem.text = text
-    new_run.append(text_elem)
-
-    hyperlink.append(new_run)
-    paragraph._p.append(hyperlink)
-    return hyperlink
-
-# Initialize database
 init_job_search_db()
+init_job_trends_db()
 
-# Your existing tab3 code with enhanced CSS styling
 with tab3:
     st.markdown("<h1 style='text-align: center; color: #ffffff; margin-bottom: 30px;'>🟦 Job Search Hub</h1>", unsafe_allow_html=True)
 
-    # Initialize session state for search mode
     if 'search_mode' not in st.session_state:
         st.session_state.search_mode = "External Platforms"
 
-    # Modern Toggle Switch with Circular Indicator
     is_external = st.session_state.search_mode == "External Platforms"
 
     toggle_html = f"""
@@ -7539,7 +7540,6 @@ with tab3:
 
     st.markdown(toggle_html, unsafe_allow_html=True)
 
-    # Create clickable buttons (hidden but functional)
     col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
@@ -7555,7 +7555,6 @@ with tab3:
     search_mode = st.session_state.search_mode
 
     if search_mode == "External Platforms":
-        # External Platforms Section
         col1, col2 = st.columns(2)
 
         with col1:
@@ -7580,12 +7579,9 @@ with tab3:
 
         if search_clicked:
             if job_role.strip() and location.strip():
-                # Call search_jobs function for external platforms
                 results = search_jobs(job_role, location, experience_level, job_type, foundit_experience)
 
-                # Save search results if user is logged in
                 if hasattr(st.session_state, 'username') and st.session_state.username:
-                    # Convert results to format expected by save_job_search
                     formatted_results = []
                     for result in results:
                         platform_name = result["title"].split(":")[0]
@@ -7600,7 +7596,6 @@ with tab3:
                 for job in results:
                     platform = job["title"].split(":")[0].lower()
 
-                    # Platform styling
                     if "linkedin" in platform:
                         platform_name = "LinkedIn"
                         btn_color = "#0e76a8"
@@ -7618,7 +7613,6 @@ with tab3:
                         btn_color = "#00c4cc"
                         platform_gradient = "linear-gradient(135deg, #00c4cc 0%, #26d0ce 100%)"
 
-                    # Render card using reusable function
                     job_card_html, card_height = render_job_card(
                         title=job_role,
                         link=job['link'],
@@ -7633,7 +7627,6 @@ with tab3:
                 st.warning("⚠️ Please enter both the Job Title and Location to perform the search.")
 
     else:
-        # RapidAPI Jobs Section
         col1, col2 = st.columns(2)
 
         with col1:
@@ -7642,10 +7635,8 @@ with tab3:
         with col2:
             rapid_location = st.text_input("📍 Location", placeholder="e.g., Mumbai", key="rapid_loc")
 
-        # Number of results
         num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
 
-        # Advanced Filters
         with st.expander("🔧 Advanced Filters"):
             date_posted = st.selectbox(
                 "📅 Date Posted",
@@ -7669,7 +7660,6 @@ with tab3:
 
         if search_rapid_clicked:
             if rapid_job_role.strip() and rapid_location.strip():
-                # Call fetch_live_jobs with parameters
                 results = fetch_live_jobs(
                     rapid_job_role,
                     rapid_location,
@@ -7678,7 +7668,6 @@ with tab3:
                     results=num_results
                 )
 
-                # Save search results if user is logged in
                 if hasattr(st.session_state, 'username') and st.session_state.username:
                     formatted_results = []
                     for job in results:
@@ -7688,11 +7677,12 @@ with tab3:
                         })
                     save_job_search(st.session_state.username, rapid_job_role, rapid_location, formatted_results)
 
+                save_job_trend(rapid_job_role, rapid_location, len(results))
+
                 st.markdown("## 🎯 RapidAPI Job Results")
 
                 if results:
                     for job in results:
-                        # Clean all job fields
                         job_title = clean_html(job.get("job_title", "N/A"))
                         job_company = clean_html(job.get("employer_name", "Unknown"))
                         job_location = f"{job.get('job_city','')}, {job.get('job_country','')}"
@@ -7702,7 +7692,6 @@ with tab3:
                         job_publisher = clean_html(job.get("job_publisher", "N/A"))
                         job_description = clean_html(job.get("job_description", ""))[:250] + "..."
 
-                        # Format date
                         formatted_date = "N/A"
                         if job.get("job_posted_at_datetime_utc") and job["job_posted_at_datetime_utc"] != "N/A":
                             try:
@@ -7711,11 +7700,9 @@ with tab3:
                             except:
                                 formatted_date = job["job_posted_at_datetime_utc"]
 
-                        # Colors
                         btn_color = "#00ff88"
                         platform_gradient = "linear-gradient(135deg, #00ff88 0%, #00cc6f 100%)"
 
-                        # Custom HTML card
                         job_card_html = f"""
 <div class="job-result-card" style="
     background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
@@ -7730,22 +7717,18 @@ with tab3:
 ">
     <div class="shimmer-overlay"></div>
 
-    <!-- Platform Badge -->
     <div style="font-size: 18px; margin-bottom: 15px; color: {btn_color}; font-weight: bold;">
         ⚡ RapidAPI (Live)
     </div>
 
-    <!-- Job Title -->
     <div style="color: #ffffff; font-size: 22px; margin-bottom: 10px; font-weight: 600; line-height: 1.4;">
         {job_title}
     </div>
 
-    <!-- Company -->
     <div style="color: #aaaaaa; font-size: 16px; margin-bottom: 15px;">
         🏢 <b>{job_company}</b>
     </div>
 
-    <!-- Job Details Grid -->
     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
         <div style="color: #cccccc; font-size: 14px;">📍 <b>Location:</b> {job_location}</div>
         <div style="color: #cccccc; font-size: 14px;">💰 <b>Salary:</b> {job_salary}</div>
@@ -7755,12 +7738,10 @@ with tab3:
         <div style="color: #cccccc; font-size: 14px;">📰 <b>Source:</b> {job_publisher}</div>
     </div>
 
-    <!-- Description -->
     <div style="color: #999999; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
         {job_description}
     </div>
 
-    <!-- Apply Button -->
     <a href="{job.get('job_apply_link', '#')}" target="_blank" style="text-decoration: none;">
         <button class="job-button" style="
             background: {platform_gradient};
@@ -7779,28 +7760,107 @@ with tab3:
     </a>
 </div>
 """
-                        
+
                         st.components.v1.html(job_card_html, height=450, scrolling=False)
 
+                    st.markdown("---")
+                    st.markdown("### <div class='title-header'>📊 Real-Time Job Market Analytics</div>", unsafe_allow_html=True)
+
+                    st.markdown("#### 🗺️ City-wise Job Heatmap")
+                    city_data = {}
+                    for city in CITIES:
+                        city_jobs = fetch_live_jobs(rapid_job_role, city, results=5)
+                        city_data[city] = len(city_jobs)
+
+                    if city_data:
+                        st.bar_chart(city_data)
+
+                    st.markdown("#### 🔧 Skill Trend Analysis")
+                    skill_count = extract_skills_from_jobs(results)
+                    if skill_count:
+                        st.bar_chart(skill_count)
+                    else:
+                        st.info("No skills detected in job descriptions.")
+
+                    st.markdown("#### 🏆 Competition Score")
+                    today_count, last_7_total, score = calculate_competition_score(rapid_job_role, rapid_location)
+                    col_m1, col_m2, col_m3 = st.columns(3)
+                    with col_m1:
+                        st.metric("Today's Jobs", today_count)
+                    with col_m2:
+                        st.metric("Last 7 Days Total", last_7_total)
+                    with col_m3:
+                        st.metric("Competition Score", f"{score:.1f}%")
+
+                    st.markdown("#### 📈 30-Day Trend Chart")
+                    trend_data = get_30day_trend(rapid_job_role, rapid_location)
+                    if trend_data:
+                        import pandas as pd
+                        df = pd.DataFrame(trend_data, columns=["day", "count"])
+                        df = df.set_index("day")
+                        st.line_chart(df)
+                    else:
+                        st.info("Not enough historical data yet. Keep searching to build trend history!")
 
                 else:
                     st.info("No jobs found. Try adjusting your search criteria.")
             else:
                 st.warning("⚠️ Please enter both the Job Title and Location to perform the search.")
 
-    # Display saved job searches if user is logged in
+    st.markdown("---")
+    st.markdown("### <div class='title-header'>🏢 Company Hiring Status Lookup</div>", unsafe_allow_html=True)
+
+    company_domain = st.text_input("🌐 Enter Company Domain", placeholder="e.g., google.com", key="company_domain")
+
+    if st.button("🔍 Check Hiring Status", key="check_company"):
+        if company_domain.strip():
+            with st.spinner("Fetching company information..."):
+                company_info = fetch_company_by_domain(company_domain.strip())
+
+                if company_info:
+                    st.markdown(f"""
+<div class="company-card" style="
+    background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+    padding: 30px;
+    border-radius: 20px;
+    margin-bottom: 25px;
+    border-left: 6px solid #00c4cc;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+">
+    <h3 style="color: #00c4cc; margin-bottom: 15px; font-size: 24px;">
+        🏢 {company_info.get('name', 'N/A')}
+    </h3>
+    <p style="color: #cccccc; margin-bottom: 10px;">
+        <b>Industry:</b> {company_info.get('industry', 'N/A')}
+    </p>
+    <p style="color: #cccccc; margin-bottom: 10px;">
+        <b>Followers:</b> {company_info.get('followerCount', 'N/A')}
+    </p>
+    <p style="color: #cccccc; margin-bottom: 10px;">
+        <b>Company Size:</b> {company_info.get('staffCount', 'N/A')} employees
+    </p>
+    <p style="color: #cccccc; margin-bottom: 10px;">
+        <b>Location:</b> {company_info.get('headquarter', {}).get('city', 'N/A')}, {company_info.get('headquarter', {}).get('country', 'N/A')}
+    </p>
+    <p style="color: {'#4ade80' if company_info.get('isHiring') else '#f87171'}; font-weight: bold; font-size: 18px; margin-top: 15px;">
+        {'✅ Currently Hiring!' if company_info.get('isHiring') else '❌ Not Hiring'}
+    </p>
+</div>
+""", unsafe_allow_html=True)
+                else:
+                    st.error("Company not found or unable to fetch data. Please check the domain and try again.")
+        else:
+            st.warning("Please enter a company domain.")
+
     if hasattr(st.session_state, 'username') and st.session_state.username:
-        # Get available platforms for filtering
         available_platforms = get_available_platforms(st.session_state.username)
         platform_options = ["All"] + available_platforms
 
-        # Get total count of searches
         total_searches = get_total_saved_searches_count(st.session_state.username)
 
         st.markdown("### 📌 Your Saved Job Searches")
 
         if total_searches > 0:
-            # Controls for filtering and pagination
             col1, col2 = st.columns([2, 1])
 
             with col1:
@@ -7811,7 +7871,6 @@ with tab3:
                 )
 
             with col2:
-                # Calculate pagination
                 searches_per_page = 5
                 filtered_count = get_total_saved_searches_count(st.session_state.username, platform_filter)
                 max_pages = max(1, (filtered_count + searches_per_page - 1) // searches_per_page)
@@ -7827,10 +7886,8 @@ with tab3:
                 else:
                     current_page = 1
 
-            # Calculate offset for pagination
             offset = (current_page - 1) * searches_per_page
 
-            # Get filtered and paginated results
             saved_searches = get_saved_job_searches(
                 st.session_state.username,
                 limit=searches_per_page,
@@ -7839,7 +7896,6 @@ with tab3:
             )
 
             if saved_searches:
-                # Calculate and display search count info
                 start_index = offset + 1
                 end_index = min(offset + len(saved_searches), filtered_count)
 
@@ -7849,14 +7905,11 @@ with tab3:
                     st.markdown(f"**Showing {start_index}-{end_index} of {filtered_count} searches**")
 
                 for search in saved_searches:
-                    # Format timestamp - Convert UTC to IST
                     timestamp = datetime.datetime.strptime(search["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
-                    # Assume stored timestamp is in UTC, convert to IST
                     timestamp_utc = timestamp.replace(tzinfo=ZoneInfo('UTC'))
                     timestamp_ist = timestamp_utc.astimezone(ZoneInfo('Asia/Kolkata'))
                     formatted_time = timestamp_ist.strftime("%b %d, %Y at %I:%M %p IST")
 
-                    # Platform styling
                     platform_lower = search["platform"].lower()
                     if "rapidapi" in platform_lower or "live" in platform_lower:
                         platform_color = "#00ff88"
@@ -7874,7 +7927,6 @@ with tab3:
                         platform_color = "#00c4cc"
                         platform_icon = "📄"
 
-                    # Create columns for the card content and delete button
                     card_col, delete_col = st.columns([10, 1])
 
                     with card_col:
@@ -7921,12 +7973,10 @@ with tab3:
 """, unsafe_allow_html=True)
 
                     with delete_col:
-                        # Delete button
                         if st.button("🗑", key=f"delete_{search['id']}", help="Delete this search"):
                             delete_saved_job_search(search['id'])
                             st.rerun()
             else:
-                # No results for the current filter
                 st.markdown(f"""
 <div style="
     background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
@@ -7941,7 +7991,6 @@ with tab3:
 </div>
 """, unsafe_allow_html=True)
         else:
-            # No saved searches at all
             st.markdown("""
 <div style="
     background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
@@ -7956,17 +8005,14 @@ with tab3:
 </div>
 """, unsafe_allow_html=True)
 
-    # Enhanced CSS with advanced animations and effects
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    /* Global Enhancements */
     .stApp {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Advanced Glow Animation */
     @keyframes glow {
         0% {
             box-shadow: 0 0 5px rgba(255,255,255,0.1), 0 0 10px rgba(0,255,255,0.1), 0 0 15px rgba(0,255,255,0.1);
@@ -7979,7 +8025,6 @@ with tab3:
         }
     }
 
-    /* Shimmer Effect */
     @keyframes shimmer {
         0% {
             transform: translateX(-100%);
@@ -8001,7 +8046,6 @@ with tab3:
         z-index: 1;
     }
 
-    /* Floating Animation */
     @keyframes float {
         0%, 100% {
             transform: translateY(0px);
@@ -8011,7 +8055,6 @@ with tab3:
         }
     }
 
-    /* Pulse Animation */
     @keyframes pulse {
         0%, 100% {
             transform: scale(1);
@@ -8021,7 +8064,6 @@ with tab3:
         }
     }
 
-    /* Enhanced Company Cards */
     .company-card {
         background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
         color: #ffffff;
@@ -8062,13 +8104,11 @@ with tab3:
         border-color: rgba(0,255,255,0.5);
     }
 
-    /* Job Result Cards */
     .job-result-card:hover {
         transform: translateY(-5px) scale(1.01);
         box-shadow: 0 15px 40px rgba(0,0,0,0.4) !important;
     }
 
-    /* Enhanced Buttons */
     .job-button::before {
         content: '';
         position: absolute;
@@ -8090,7 +8130,6 @@ with tab3:
         box-shadow: 0 8px 25px rgba(0,0,0,0.3);
     }
 
-    /* Enhanced Pills */
     .pill {
         display: inline-block;
         background: linear-gradient(135deg, #333 0%, #444 100%);
@@ -8126,7 +8165,6 @@ with tab3:
         box-shadow: 0 4px 12px rgba(0,255,255,0.3);
     }
 
-    /* Enhanced Title Headers */
     .title-header {
         color: #ffffff;
         font-size: 28px;
@@ -8154,7 +8192,6 @@ with tab3:
         border-radius: 2px;
     }
 
-    /* Company Logo Enhancement */
     .company-logo {
         font-size: 28px;
         margin-right: 12px;
@@ -8172,7 +8209,6 @@ with tab3:
         z-index: 2;
     }
 
-    /* Responsive Enhancements */
     @media (max-width: 768px) {
         .company-card, .job-result-card {
             padding: 20px;
@@ -8188,7 +8224,6 @@ with tab3:
         }
     }
 
-    /* Scrollbar Styling */
     ::-webkit-scrollbar {
         width: 8px;
     }
@@ -8208,10 +8243,6 @@ with tab3:
     </style>
     """, unsafe_allow_html=True)
 
-    # ---------- Company Lookup by Domain ----------
-
-
-    # ---------- Featured Companies ----------
     st.markdown("### <div class='title-header'>🏢 Featured Companies</div>", unsafe_allow_html=True)
 
     selected_category = st.selectbox("📂 Browse Featured Companies By Category", ["All", "tech", "indian_tech", "global_corps"])
@@ -8230,7 +8261,6 @@ with tab3:
         </a>
         """, unsafe_allow_html=True)
 
-    # ---------- Market Insights ----------
     st.markdown("### <div class='title-header'>📈 Job Market Trends</div>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
 
@@ -8254,7 +8284,6 @@ with tab3:
             </div>
             """, unsafe_allow_html=True)
 
-    # ---------- Salary Insights ----------
     st.markdown("### <div class='title-header'>💰 Salary Insights</div>", unsafe_allow_html=True)
     for role in JOB_MARKET_INSIGHTS["salary_insights"]:
         st.markdown(f"""
@@ -8264,6 +8293,7 @@ with tab3:
             <p style="position: relative; z-index: 2;">💵 Salary Range: <span style="color: #34d399; font-weight: 600;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
+
 
 def evaluate_interview_answer(answer: str, question: str = None):
     """
