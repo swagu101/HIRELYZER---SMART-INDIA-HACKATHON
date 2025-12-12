@@ -2875,7 +2875,7 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
 with tab1:
 
     # ============================================
-    # FLOATING AI CHATBOT FOR RESUME ANALYZER (FIXED)
+    # FLOATING AI CHATBOT FOR RESUME ANALYZER (FULLY FIXED)
     # ============================================
 
     from groq import Groq
@@ -2913,7 +2913,7 @@ with tab1:
     """
 
     # ============================================
-    # FIXED FLOATING STREAMLIT BUTTON (No JS needed)
+    # FLOATING BUTTON (WORKING)
     # ============================================
 
     chat_button = st.button(
@@ -2922,11 +2922,9 @@ with tab1:
         help="Open Resume Assistant",
     )
 
-    # Toggle chat visibility
     if chat_button:
         st.session_state.resume_chat_open = not st.session_state.resume_chat_open
 
-    # Float the button with CSS
     st.markdown("""
     <style>
     div[data-testid="stButton"] > button[title="Open Resume Assistant"] {
@@ -2945,6 +2943,13 @@ with tab1:
     }
     </style>
     """, unsafe_allow_html=True)
+
+    # ============================================
+    # RERUN HANDLER (SAFE)
+    # ============================================
+    if st.session_state.get("resume_chat_refresh", False):
+        st.session_state["resume_chat_refresh"] = False
+        st.rerun()
 
     # ============================================
     # CHAT PANEL UI
@@ -2994,25 +2999,24 @@ with tab1:
         st.markdown("<div class='resume-chat-panel'>", unsafe_allow_html=True)
         st.markdown("### 🤖 Resume Assistant")
 
-        # CHAT HISTORY WINDOW
+        # CHAT WINDOW
         st.markdown("<div class='resume-chat-scroll'>", unsafe_allow_html=True)
         for msg in st.session_state.resume_chat_history:
             css = "resume-user-msg" if msg["role"] == "user" else "resume-bot-msg"
             st.markdown(f"<div class='{css}'>{msg['content']}</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # CHAT INPUT
+        # USER INPUT
         user_msg = st.text_input("Ask something:", key="resume_chat_input")
 
         if st.button("Send", key="resume_chat_send"):
             if user_msg.strip():
+
                 st.session_state.resume_chat_history.append({"role": "user", "content": user_msg})
 
-                # Build LLaMA conversation
                 messages = [{"role": "system", "content": RESUME_ASSISTANT_SYSTEM_PROMPT}]
                 messages += st.session_state.resume_chat_history
 
-                # Optional resume context
                 resume_text = st.session_state.get("current_resume_text", "")
                 if resume_text:
                     messages.append({"role": "user", "content": "Resume context:\n" + resume_text[:2000]})
@@ -3028,15 +3032,17 @@ with tab1:
                     bot_reply = f"⚠️ Error contacting LLaMA: {e}"
 
                 st.session_state.resume_chat_history.append({"role": "assistant", "content": bot_reply})
-                st.experimental_rerun()
 
-        # DOWNLOAD CHAT HISTORY
+                # trigger rerun safely
+                st.session_state["resume_chat_refresh"] = True
+
+        # DOWNLOAD CHAT
         history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.resume_chat_history])
         st.download_button("📄 Download Chat", history_text, "resume_chat.txt")
 
         if st.button("Close Assistant"):
             st.session_state.resume_chat_open = False
-            st.experimental_rerun()
+            st.session_state["resume_chat_refresh"] = True
 
         st.markdown("</div>", unsafe_allow_html=True)
 
