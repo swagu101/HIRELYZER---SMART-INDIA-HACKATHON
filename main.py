@@ -2950,7 +2950,7 @@ If asked an unrelated question, reply:
 You must use the actual behavior of the backend logic.
 """
 
-# =============== FLOATING CHAT BUTTON ===============
+# ================= FLOATING CHAT BUTTON =================
 st.markdown("""
 <style>
 #float-chat-btn {
@@ -2970,26 +2970,27 @@ st.markdown("""
 }
 </style>
 
-<button id="float-chat-btn" onclick="document.dispatchEvent(new Event('toggleChat'))">💬</button>
-
-<script>
-document.addEventListener('toggleChat', function() {
-    window.parent.postMessage({type:'streamlit_toggle_chat'}, '*')
-})
-</script>
+<button id="float-chat-btn" onclick="window.parent.postMessage({type: 'toggle_resume_chat'}, '*')">💬</button>
 """, unsafe_allow_html=True)
 
-# ---------------- JS Listener for Toggle ----------------
-chat_toggle = st.session_state.get("resume_chat_open")
+# ---------------- JS → Python Bridge ----------------
+# This listens for the posted event and toggles the chat
+event = st.experimental_get_query_params().get("toggle", None)
+
+if "__chat_toggle_event__" not in st.session_state:
+    st.session_state["__chat_toggle_event__"] = False
 
 def toggle_chat():
     st.session_state.resume_chat_open = not st.session_state.resume_chat_open
 
-st.experimental_connection("chat_toggle", lambda: None)
+# Streamlit event listener
+message = st.experimental_get_query_params().get("streamlit_message", [""])[0]
+if message == "toggle_resume_chat":
+    toggle_chat()
 
-# ============================================
+# ======================================================
 # RENDER CHAT PANEL WHEN OPEN
-# ============================================
+# ======================================================
 
 if st.session_state.resume_chat_open:
 
@@ -3052,19 +3053,15 @@ if st.session_state.resume_chat_open:
 
     if st.button("Send", key="send_resume_chat"):
         if user_msg.strip():
-            # Store user message
             st.session_state.resume_chat_history.append({"role": "user", "content": user_msg})
 
-            # Build messages for LLaMA
             messages = [{"role": "system", "content": RESUME_ASSISTANT_SYSTEM_PROMPT}]
             messages += st.session_state.resume_chat_history
 
-            # Add optional context
             resume_ctx = st.session_state.get("current_resume_text", "")
             if resume_ctx:
                 messages.append({"role": "user", "content": "Resume context:\n" + resume_ctx[:2000]})
 
-            # Call Groq LLaMA
             try:
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
@@ -3087,12 +3084,12 @@ if st.session_state.resume_chat_open:
         file_name="resume_chat_history.txt"
     )
 
-    # ---------- CLOSE BUTTON ----------
     if st.button("Close Assistant"):
         st.session_state.resume_chat_open = False
         st.experimental_rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
     uploaded_files = st.file_uploader(
         "📄 Upload PDF Resumes",
