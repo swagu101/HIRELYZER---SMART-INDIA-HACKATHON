@@ -2875,7 +2875,7 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
 with tab1:
 
     # ============================================
-    # FLOATING AI CHATBOT FOR RESUME ANALYZER (FIXED)
+    # FLOATING AI CHATBOT FOR RESUME ANALYZER
     # ============================================
 
     from groq import Groq
@@ -2891,65 +2891,59 @@ with tab1:
         st.session_state.resume_chat_history = [
             {
                 "role": "assistant",
-                "content": "Hello! I am your Resume Analyzer Assistant. Ask me anything about ATS scoring, resume sections, or gender bias detection."
+                "content": "Hello! I am your Resume Analyzer Assistant. Ask me about ATS scoring, gender bias detection, section scoring, PDF requirements, or how your resume is analyzed."
             }
         ]
 
-    # AI KNOWLEDGE (SYSTEM PROMPT)
+    # AI system prompt with website knowledge
     RESUME_ASSISTANT_SYSTEM_PROMPT = """
-    You are the official assistant for the Hirelyzer Resume Analyzer.
+    You are the official assistant for the Hirelyzer Resume Analyzer (Tab 1).
 
     You ONLY answer questions about:
-    - ATS scoring
-    - Keyword matching
-    - Resume section scoring
-    - Gender bias detection and masculine/feminine words
-    - PDF support and extraction (PyMuPDF)
-    - OCR fallback usage
-    - Resume processing steps
+    - ATS scoring method (keyword match, structure, clarity, relevancy)
+    - Gender bias detection (masculine vs feminine-coded words)
+    - Bias score calculation
+    - Supported PDF file format and extraction using PyMuPDF
+    - OCR fallback behavior
+    - Section-wise scoring rules
+    - How resume highlights are generated
+    - What data the analyzer extracts
+    - How the website processes resumes
 
-    Respond with: "I am here only to help with the Resume Analyzer."
-    if the user asks anything unrelated.
+    If the user asks ANYTHING outside resume analysis,
+    respond: "I am here only to help with the Resume Analyzer."
     """
 
-    # ============================================
-    # FIXED FLOATING STREAMLIT BUTTON (No JS needed)
-    # ============================================
-
-    chat_button = st.button(
-        "💬",
-        key="resume_chat_toggle_btn",
-        help="Open Resume Assistant",
-    )
-
-    # Toggle chat visibility
-    if chat_button:
-        st.session_state.resume_chat_open = not st.session_state.resume_chat_open
-
-    # Float the button with CSS
+    # Floating chat button
     st.markdown("""
     <style>
-    div[data-testid="stButton"] > button[title="Open Resume Assistant"] {
+    #resume-chat-btn {
         position: fixed;
         bottom: 25px;
         right: 25px;
         background: linear-gradient(135deg,#00BFFF,#0077B6);
         width: 65px;
         height: 65px;
-        font-size: 32px;
         border-radius: 50%;
         color: white;
+        font-size: 32px;
         border: none;
+        cursor: pointer;
         box-shadow: 0px 8px 20px rgba(0,0,0,0.4);
         z-index: 99999;
     }
     </style>
+
+    <button id="resume-chat-btn" onclick="document.dispatchEvent(new Event('toggleResumeChat'))">💬</button>
+
+    <script>
+    document.addEventListener('toggleResumeChat', () => {
+        window.parent.postMessage({type: 'toggle_resume_chat'}, '*');
+    });
+    </script>
     """, unsafe_allow_html=True)
 
-    # ============================================
-    # CHAT PANEL UI
-    # ============================================
-
+    # Render chat panel
     if st.session_state.resume_chat_open:
 
         st.markdown("""
@@ -2965,7 +2959,7 @@ with tab1:
             border-radius: 14px;
             z-index: 99999;
             border: 1px solid #00BFFF44;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
         }
         .resume-chat-scroll {
             max-height: 300px;
@@ -2994,30 +2988,34 @@ with tab1:
         st.markdown("<div class='resume-chat-panel'>", unsafe_allow_html=True)
         st.markdown("### 🤖 Resume Assistant")
 
-        # CHAT HISTORY WINDOW
+        # Chat message window
         st.markdown("<div class='resume-chat-scroll'>", unsafe_allow_html=True)
+
         for msg in st.session_state.resume_chat_history:
-            css = "resume-user-msg" if msg["role"] == "user" else "resume-bot-msg"
-            st.markdown(f"<div class='{css}'>{msg['content']}</div>", unsafe_allow_html=True)
+            style = "resume-user-msg" if msg["role"] == "user" else "resume-bot-msg"
+            st.markdown(f"<div class='{style}'>{msg['content']}</div>", unsafe_allow_html=True)
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # CHAT INPUT
+        # Input field
         user_msg = st.text_input("Ask something:", key="resume_chat_input")
 
         if st.button("Send", key="resume_chat_send"):
             if user_msg.strip():
+
+                # Add user message
                 st.session_state.resume_chat_history.append({"role": "user", "content": user_msg})
 
-                # Build LLaMA conversation
+                # Build conversation
                 messages = [{"role": "system", "content": RESUME_ASSISTANT_SYSTEM_PROMPT}]
                 messages += st.session_state.resume_chat_history
 
-                # Optional resume context
-                resume_text = st.session_state.get("current_resume_text", "")
-                if resume_text:
-                    messages.append({"role": "user", "content": "Resume context:\n" + resume_text[:2000]})
+                # Resume context (if exists)
+                resume_ctx = st.session_state.get("current_resume_text", "")
+                if resume_ctx:
+                    messages.append({"role": "user", "content": "Resume context:\n" + resume_ctx[:2000]})
 
-                # LLaMA Call
+                # Groq LLaMA call
                 try:
                     result = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
@@ -3025,12 +3023,13 @@ with tab1:
                     )
                     bot_reply = result.choices[0].message.content
                 except Exception as e:
-                    bot_reply = f"⚠️ Error contacting LLaMA: {e}"
+                    bot_reply = f"⚠️ Error connecting to LLaMA: {e}"
 
+                # Save bot reply
                 st.session_state.resume_chat_history.append({"role": "assistant", "content": bot_reply})
                 st.experimental_rerun()
 
-        # DOWNLOAD CHAT HISTORY
+        # Download chat
         history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.resume_chat_history])
         st.download_button("📄 Download Chat", history_text, "resume_chat.txt")
 
@@ -3088,34 +3087,38 @@ with tab1:
                 st.subheader(f"📄 Original Resume Preview: {uploaded_file.name}")
 
                 try:
-                    pdf_viewer(uploaded_file.read(), key=f"pdf_viewer_{uploaded_file.name}")
+                    # Show PDF preview
+                    pdf_viewer(
+                        uploaded_file.read(),
+                        key=f"pdf_viewer_{uploaded_file.name}"
+                    )
+
                     uploaded_file.seek(0)
 
                     resume_text = safe_extract_text(uploaded_file)
-                    st.session_state["current_resume_text"] = resume_text
 
                     if resume_text:
                         st.markdown(f"""
                         <div class='slide-message success-msg'>
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
-                          stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-                          ✅ Successfully processed <b>{uploaded_file.name}</b>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
+                              stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                            ✅ Successfully processed <b>{uploaded_file.name}</b>
                         </div>
                         """, unsafe_allow_html=True)
+
                     else:
                         st.markdown(f"""
                         <div class='slide-message warn-msg'>
-                          ⚠️ <b>{uploaded_file.name}</b> does not contain valid resume text.
+                            ⚠️ <b>{uploaded_file.name}</b> does not contain valid resume text.
                         </div>
                         """, unsafe_allow_html=True)
 
                 except Exception as e:
                     st.markdown(f"""
                     <div class='slide-message error-msg'>
-                      ❌ Could not process <b>{uploaded_file.name}</b>: {e}
+                        ❌ Could not display or process <b>{uploaded_file.name}</b>: {e}
                     </div>
                     """, unsafe_allow_html=True)
-
 
 
 # ✅ Initialize state
@@ -3890,7 +3893,6 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-
 
 # ✅ Initialize state
 # Initialize session state
